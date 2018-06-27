@@ -1,169 +1,121 @@
-// Step 7 (Final): Change the app's theme
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:contacts_service/contacts_service.dart';
-import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
-void main() => runApp(new MyApp());
+final FirebaseAuth _auth = FirebaseAuth.instance;
+final GoogleSignIn _googleSignIn = new GoogleSignIn();
+
+void main() {
+  runApp(new MyApp());
+}
 
 class MyApp extends StatelessWidget {
-
   @override
   Widget build(BuildContext context) {
     return new MaterialApp(
-      title: 'Contacts',
-      theme: new ThemeData(
-        primaryColor: Colors.white,
-      ),
-      home: new RandomWords(),
+      title: 'Firebase Auth Demo',
+      home: new MyHomePage(title: 'Firebase Auth Demo'),
     );
   }
 }
 
-class RandomWords extends StatefulWidget {
+class MyHomePage extends StatefulWidget {
+  MyHomePage({Key key, this.title}) : super(key: key);
+
+  final String title;
+
   @override
-  createState() => new RandomWordsState();
+  _MyHomePageState createState() => new _MyHomePageState();
 }
 
-class RandomWordsState extends State<RandomWords> {
-  static Future getContacts() async{
-    print ("inside getContacts");
-    Iterable<Contact> contacts = await ContactsService.getContacts();
-    return contacts.toList();
+class _MyHomePageState extends State<MyHomePage> {
+  Future<String> _message = new Future<String>.value('');
+
+  Future<String> _testSignInAnonymously() async {
+    final FirebaseUser user = await _auth.signInAnonymously();
+    assert(user != null);
+    assert(user.isAnonymous);
+    assert(!user.isEmailVerified);
+    assert(await user.getIdToken() != null);
+    if (Platform.isIOS) {
+      // Anonymous auth doesn't show up as a provider on iOS
+      assert(user.providerData.isEmpty);
+    } else if (Platform.isAndroid) {
+      // Anonymous auth does show up as a provider on Android
+      assert(user.providerData.length == 1);
+      assert(user.providerData[0].providerId == 'firebase');
+      assert(user.providerData[0].uid != null);
+      assert(user.providerData[0].displayName == null);
+      assert(user.providerData[0].photoUrl == null);
+      assert(user.providerData[0].email == null);
+    }
+
+    final FirebaseUser currentUser = await _auth.currentUser();
+    assert(user.uid == currentUser.uid);
+
+    return 'signInAnonymously succeeded: $user';
   }
 
-  final _suggestions = getContacts();
-  final _suggestion = [];
+  Future<String> _testSignInWithGoogle() async {
+    final GoogleSignInAccount googleUser = await _googleSignIn.signIn();
 
-  final _saved = [];
+    final GoogleSignInAuthentication googleAuth =
+    await googleUser.authentication;
 
-  final _biggerFont = const TextStyle(fontSize: 18.0);
-   List<Widget> children1 = [new Text("uyfkhkch")];
+    final FirebaseUser user = await _auth.signInWithGoogle(
+      accessToken: googleAuth.accessToken,
+      idToken: googleAuth.idToken,
+    );
 
+    assert(user.email != null);
+    assert(user.displayName != null);
+    assert(!user.isAnonymous);
+    assert(await user.getIdToken() != null);
+    final FirebaseUser currentUser = await _auth.currentUser();
+    print(currentUser.email);
+    print(user.email);
+    assert(user.uid == currentUser.uid);
+    return 'signInWithGoogle succeeded: ';
+  }
 
   @override
   Widget build(BuildContext context) {
     return new Scaffold(
       appBar: new AppBar(
-        title: new Text('Contacts'),
-        actions: <Widget>[
-          new IconButton(icon: new Icon(Icons.list), onPressed: _pushSaved)
+        title: new Text(widget.title),
+      ),
+      body: new Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          new MaterialButton(
+              child: const Text('Test signInAnonymously'),
+              onPressed: () {
+                setState(() {
+                  _message = _testSignInAnonymously();
+                });
+              }),
+          new MaterialButton(
+              child: const Text('Test signInWithGoogle'),
+              onPressed: () {
+                setState(() {
+                  _message = _testSignInWithGoogle();
+                });
+              }),
+          new FutureBuilder<String>(
+              future: _message,
+              builder: (_, AsyncSnapshot<String> snapshot) {
+                return new Text(snapshot.data ?? '',
+                    style: const TextStyle(
+                        color: const Color.fromARGB(255, 0, 155, 0)));
+              }),
         ],
-      ),
-      body: _buildSuggestions(),
-    );
-  }
-
-  Widget _buildSuggestions() {
-    return new ListView.builder(
-      padding: const EdgeInsets.all(16.0),
-      itemBuilder: (context, i) {
-
-        if (i.isOdd) return new Row(
-          children: <Widget>[
-
-            Flexible(
-          fit: FlexFit.tight ,
-          child: Container(
-          height: 1.0,
-          decoration: const BoxDecoration(
-            color: Colors.black,
-          ),
-          )),
-
-        Container(
-          height: 16.0,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-          ),
-          child: new Text("Recent Added",
-            textAlign: TextAlign.center,
-          ),),
-          Flexible(
-            fit: FlexFit.tight,
-        child:
-          Container(
-            height: 1.0,
-            decoration: const BoxDecoration(
-              color: Colors.black,
-            ),
-          ))
-
-
-          ],
-        );
-
-        final index = 0;
-        _suggestions.whenComplete((){
-          _suggestions.asStream().forEach((var a){
-              List<Contact> b = a;
-              b.forEach((ele){
-               ele.phones.forEach((e)=>print(e.label));
-             });
-
-          });
-        });
-        return new Text('aesdfe');
-      },
-    );
-  }
-
-  Widget _buildRow(var pair) {
-    final alreadySaved = _saved.contains(pair);
-    return new ListTile(
-      isThreeLine: true,
-    title: new Text(
-        pair.asPascalCase,
-        style: new TextStyle(fontWeight: FontWeight.normal, fontSize: 15.0),
-
-      ),
-      leading:  new CircleAvatar(
-        child: new Text('A'),
-      ),
-      subtitle: new ButtonBar(alignment: MainAxisAlignment.start,children: <Widget>[new IconButton(icon: new Icon(Icons.phone), onPressed:  () {
-      setState(
-            () {
-          if (alreadySaved) {
-            _saved.remove(pair);
-          } else {
-            _saved.add(pair);
-          }
-        },
-      );
-    }, alignment: Alignment.bottomLeft,)],),
-
-
-    );
-  }
-
-  void _pushSaved() {
-    Navigator.of(context).push(
-      new MaterialPageRoute(
-        builder: (context) {
-          final tiles = _saved.map(
-                (pair) {
-              return new ListTile(
-                title: new Text(
-                  pair.asPascalCase,
-                  style: _biggerFont,
-                ),
-              );
-            },
-          );
-          final divided = ListTile
-              .divideTiles(
-            context: context,
-            tiles: tiles,
-          )
-              .toList();
-
-          return new Scaffold(
-            appBar: new AppBar(
-              title: new Text('Hello world'),
-            ),
-            body: new ListView(children: divided),
-          );
-        },
       ),
     );
   }
